@@ -59,9 +59,9 @@
       <category term="设计实践" scheme="http://lotuswlz.github.io/categories/%E8%AE%BE%E8%AE%A1%E5%AE%9E%E8%B7%B5/"/>
     
     
-      <category term="权限设计" scheme="http://lotuswlz.github.io/tags/%E6%9D%83%E9%99%90%E8%AE%BE%E8%AE%A1/"/>
-    
       <category term="java" scheme="http://lotuswlz.github.io/tags/java/"/>
+    
+      <category term="权限设计" scheme="http://lotuswlz.github.io/tags/%E6%9D%83%E9%99%90%E8%AE%BE%E8%AE%A1/"/>
     
       <category term="Spring AOP" scheme="http://lotuswlz.github.io/tags/Spring-AOP/"/>
     
