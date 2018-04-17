@@ -1,0 +1,11 @@
+digraph abc {
+fontname = "Helvetica";
+fontsize=8;
+rankdir=LR;
+	"A" [shape="record"]
+    "A" -> "B" [style="dashed", color="red", arrowhead="none"];
+    "B" -> "C";
+    "B" -> "D";
+    "C" -> "E";
+    "C" -> "F";
+}

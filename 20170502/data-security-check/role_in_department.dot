@@ -1,0 +1,12 @@
+digraph roles {
+	rankdir = TB;
+	edge [ arrowhead=none ];
+	"1-a" -> "2-a";
+	"1-a" -> "2-b";
+	"2-a" -> "3-a";
+	"2-a" -> "3-b";
+	"2-a" -> "3-c";
+	"2-a" -> "3-d";
+	"2-b" -> "3-e";
+	"2-b" -> "3-f";
+}

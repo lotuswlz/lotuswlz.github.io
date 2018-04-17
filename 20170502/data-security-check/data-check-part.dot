@@ -1,0 +1,8 @@
+digraph data_flow_part {
+	rankdir=LR;
+	subgraph "table_privilege" {
+		node [shape="record",fontsize=10];
+		"身份校验" -> "关键信息获取
+		(参与校验的信息)" -> "输入参数校验" -> "输出结果校验";
+	}
+}

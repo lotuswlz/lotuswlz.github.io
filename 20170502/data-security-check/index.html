@@ -1,0 +1,78 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description"><title>面向数据的访问权限控制（分析与实现） | 鹤音谷</title><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/normalize/8.0.0/normalize.min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/1.0.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/1.0.0/grids-responsive-min.css"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"><link rel="alternate" type="application/atom+xml" href="/atom.xml"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">面向数据的访问权限控制（分析与实现）</h1><a id="logo" href="/.">鹤音谷</a><p class="description">心之所向，素履以往</p></div><div id="nav-menu"><a class="current" href="/."><i class="fa fa-home"> 首页</i></a><a href="/archives/"><i class="fa fa-archive"> 归档</i></a><a href="/about/index.html"><i class="fa fa-user"> 关于</i></a><a href="/guest-comments/index.html"><i class="fa fa-comments"> 留言</i></a><a href="/history/index.html"><i class="fa fa-history"> 历史</i></a><a href="/atom.xml"><i class="fa fa-rss"> 订阅</i></a></div></div><div class="pure-g" id="layout"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">面向数据的访问权限控制（分析与实现）</h1><div class="post-meta">May 2, 2017<span> | </span><span class="category"><a href="/categories/设计实践/">设计实践</a></span></div><div class="post-content"><p>使用过spring全家桶的朋友们，提起权限控制，一定会想到spring security，没错，spring security实现访问控制非常方便简洁。但在企业级应用中，仅有功能权限控制是不够的，例如，A与B同一角色，但分属不同部门，其所看到的数据是完全不同的。简而言之，即：</p>
+<p><strong>角色（role）或权限（privilege）只是对行为（api、method）等在<u>代码级</u>做的控制</strong>。</p>
+<p>而<strong>数据访问权限的控制</strong>，是面向<strong><u>数据</u></strong>的权限控制。</p>
+<p>那么今天来介绍一下，笔者在实际应用中，是如何“优雅”的实现数据权限控制：</p>
+<ol>
+<li><a href="#1st">什么场景需要面向数据做权限控制？</a></li>
+<li><a href="#2nd">界定权限控制的职责</a></li>
+<li><a href="#3rd">如何抽取公共组件？</a></li>
+<li><a href="#4th">基于Spring AOP实现数据访问控制</a></li>
+</ol>
+<h3 id="什么场景需要面向数据做访问控制？"><a href="#什么场景需要面向数据做访问控制？" class="headerlink" title="什么场景需要面向数据做访问控制？"></a><a name="1st"></a><em>什么场景需要面向数据做访问控制？</em></h3><p>拿刚刚的例子来说，两个同级别同角色的人，由于身处不同的部门，其数据可见性是不同的，A能看到A所在部门的数据，却不能看到B所在部门的数据。如下图中每个节点上的人，都只能看到本节点及以下节点的数据：<br><img src="role_in_department.svg" alt="图一"></p>
+<p>从功能上来说，我们希望：</p>
+<ol>
+<li>结果集过滤：查看结果时根据当前用户所在层级加过滤条件</li>
+<li>平行越权控制：即增删改查别人的数据，此时，应拒绝访问，并给出提示</li>
+</ol>
+<h3 id="界定清楚权限控制的职责"><a href="#界定清楚权限控制的职责" class="headerlink" title="界定清楚权限控制的职责"></a><a name="2nd"></a><em>界定清楚权限控制的职责</em></h3><p>首先，从单一职责的角度出发，应当将结果集过滤归于业务处理的范畴，对于API而言，由参数决定其资源范围；对于方法而言，由入参决定其返回结果范围；做到input与output对应。于是，我们只剩下第二个<u><strong>平行越权控制</strong></u>需要放在权限控制来考虑，即：如果你访问了不该访问的数据，拒绝访问，并给出错误提示（通常是403 forbidden）。</p>
+<p>可即便如此，每个api每个方法都这么校验，尤其不同api校验规则可能还不一样，这将是多么浩大并且不易维护的一个工作啊！</p>
+<h3 id="如何抽取公共组件"><a href="#如何抽取公共组件" class="headerlink" title="如何抽取公共组件"></a><a name="3rd"></a><em>如何抽取公共组件</em></h3><p>那么，有没有现成的框架来实现数据权限控制呢？同样是普遍面临的权限控制问题，面向功能的控制，如spring security一样的框架，非常之多，而数据权限控制就少之又少呢？</p>
+<p>原因很简单：<strong>面向数据的权限控制，与功能权限控制相比，其与业务相关度更大，没有一家企业的层级结构与业务逻辑是一样的。</strong><br>举几个例子：</p>
+<ol>
+<li>A公司的部门职级非常严谨，每个人只能看到比自己低级别的人的数据；</li>
+<li>B公司很宽松，只有部分敏感信息不可见，其他信息人人可见；</li>
+<li>C公司有特权部门，在该部门的人，不受级别限制，可以操作全公司的数据，其他部门则不然；</li>
+<li>D公司数据对所有人可见，但不同级别有不同的修改权限，低级别的人不能删除修改，可以增加，高级别的增删改查均可……</li>
+</ol>
+<p>这样例子数不胜数，那我们就没有什么办法抽象出一个数据控制层来统一处理吗？</p>
+<p><b>当然有办法</b>。只是粒度问题。</p>
+<p>我们需要抽取一个与业务无关，或者能够将业务代理出去的框架，唯有这样才能称之为框架。</p>
+<p>首先，我们来考虑当一个请求进来时，有多少事情要做（以api粒度列出）：</p>
+<p><img src="data-check-flow.svg" alt="data validation flow"></p>
+<p>在我们的例子中，有两处需要与用户所属层级进行比对：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">No.</th>
+<th>Item</th>
+<th>Descrition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">1</td>
+<td>参数校验</td>
+<td>例如：获取某部门下数据，/api/XXX?deptId=123</td>
+</tr>
+<tr>
+<td style="text-align:center">2</td>
+<td>结果集校验</td>
+<td>api所返回的api，是否包含不可访问的内容？</td>
+</tr>
+</tbody>
+</table>
+<p>那么有朋友要问，如果我的权限设计里，用的不是层级来做比对，而是有其他业务规则，怎么办？</p>
+<p>好问题，如果我们把与业务逻辑的部分抽离，仅仅按照操作顺序可以列出如下几步：</p>
+<p><img src="data-check-part.svg" alt="data check steps"></p>
+<p>好，现在这几个步骤已经与业务无关了。其中：</p>
+<ul>
+<li><strong>身份校验</strong>，由负责功能权限验证的框架来实现（如spring security）；</li>
+<li><strong>获取关键信息</strong>，也可以从功能权限控制的代码得到，我们只需要实现一个接口即可。</li>
+<li><strong>输入参数校验</strong>，输入是最重要的部分，前面我们提到过，输入参数和结果应该是吻合的，因此很大一部分api根据参数足以完成平行越权的校验。对于那些在api内部通过session获取当前用户，完成过滤查询结果集的情形，既然用户信息已经获得了，自然也无需校验了。即便校验，也可以在条件查询的方法内部，继续校验入参。仍然是一样的原理。</li>
+<li><strong>输出参数校验</strong>，考虑极少数的情形下，按照登录用户附带信息查询到的结果，仍然存在不允许访问的数据，那么我们需要对结果进行处理（过滤或者回滚）。原则上，完成了输入校验后，还存在这种情形，应考虑是否设计存在漏洞，以至于输入输出不符。</li>
+</ul>
+<p>到此，我们的新框架职责梳理清楚了。</p>
+<p>真的吗？</p>
+<p>难道不需要考虑一下，如果项目中存在内部定时任务、系统集成、微服务互访等等不存在登录用户的情形吗？</p>
+<p>嗯，我们前面的分析，都建立在，<strong>有登录用户，取得了校验所需必要信息</strong>的基础上。如果你的项目存在上面这些没有登录用户的校验，是否需要进行数据访问控制校验？</p>
+<p>无论你的答案是Yes或No，我们已经意识到，这是一个必须定制的点，由此，我们可以得到这套新框架需要哪些模块了。</p>
+<p><img src="data-check-module.svg" alt="modules"></p>
+<h3 id="基于Spring-AOP实现数据访问控制"><a href="#基于Spring-AOP实现数据访问控制" class="headerlink" title=" 基于Spring AOP实现数据访问控制"></a><a name="4th"></a> <em>基于Spring AOP实现数据访问控制</em></h3><p>分析清楚开发任务之后，下来我们来实现，这里安利一下笔者自己实现的一套代码：<a href="https://github.com/lotuswlz/data-access-security.git" target="_blank" rel="noopener">https://github.com/lotuswlz/data-access-security.git</a></p>
+<p>（未完待续）</p>
+</div><div class="tags"><a href="/tags/权限设计/">权限设计</a><a href="/tags/java/">java</a><a href="/tags/Spring-AOP/">Spring AOP</a></div><div class="post-nav"><a class="pre" href="/20180323/spring-cloud-config-encryption/">Spring Cloud Config - Encryption（一）</a><a class="next" href="/20170425/gradle-create-java-project/">使用gradle创建java项目</a></div><div id="uyan_frame"></div><script type="text/javascript" src="//v2.uyan.cc/code/uyan.js?uid=2131866"></script></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><div class="search-form"><input id="local-search-input" placeholder="Search" type="text" name="q" results="0"/><div id="local-search-result"></div></div></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> 分类</i></div><ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/工具/">工具</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/技术笔记/">技术笔记</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/设计实践/">设计实践</a></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> 标签</i></div><div class="tagcloud"><a href="/tags/graphviz/" style="font-size: 15px;">graphviz</a> <a href="/tags/权限设计/" style="font-size: 15px;">权限设计</a> <a href="/tags/java/" style="font-size: 15px;">java</a> <a href="/tags/Spring-AOP/" style="font-size: 15px;">Spring AOP</a> <a href="/tags/dot/" style="font-size: 15px;">dot</a> <a href="/tags/代码画图/" style="font-size: 15px;">代码画图</a> <a href="/tags/gradle/" style="font-size: 15px;">gradle</a> <a href="/tags/构建工具/" style="font-size: 15px;">构建工具</a> <a href="/tags/初学者手册/" style="font-size: 15px;">初学者手册</a> <a href="/tags/plantuml/" style="font-size: 15px;">plantuml</a> <a href="/tags/Spring/" style="font-size: 15px;">Spring</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> 最近文章</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/20180323/spring-cloud-config-encryption/">Spring Cloud Config - Encryption（一）</a></li><li class="post-list-item"><a class="post-list-link" href="/20170502/data-security-check/">面向数据的访问权限控制（分析与实现）</a></li><li class="post-list-item"><a class="post-list-link" href="/20170425/gradle-create-java-project/">使用gradle创建java项目</a></li><li class="post-list-item"><a class="post-list-link" href="/20170418/plantuml/">用代码来画图：plantuml</a></li><li class="post-list-item"><a class="post-list-link" href="/20170418/dot-language/">用代码来画图：Dot Language</a></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> 友情链接</i></div><ul></ul><a href="http://icodeit.org/" title="邱俊涛" target="_blank">邱俊涛</a><ul></ul><a href="http://agreal.github.io/" title="秦小强" target="_blank">秦小强</a><ul></ul><a href="http://hy1984427.github.io/" title="黄勇" target="_blank">黄勇</a><ul></ul><a href="https://www.phodal.com/" title="黄峰达" target="_blank">黄峰达</a><ul></ul><a href="http://www.jianshu.com/u/MzaWyf" title="杨栋" target="_blank">杨栋</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">Copyright © 2018 <a href="/." rel="nofollow">鹤音谷.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a class="show" id="rocket" href="#top"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//cdn.bootcss.com/fancybox/3.2.5/jquery.fancybox.min.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/fancybox/3.2.5/jquery.fancybox.min.css"><script type="text/javascript" src="/js/search.js?v=0.0.0"></script><script>var search_path = 'search.xml';
+if (search_path.length == 0) {
+   search_path = 'search.xml';
+}
+var path = '/' + search_path;
+searchFunc(path, 'local-search-input', 'local-search-result');
+</script><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>

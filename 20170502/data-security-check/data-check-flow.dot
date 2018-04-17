@@ -1,0 +1,35 @@
+digraph data_check_flow {
+	rank = TB;
+	node [fontsize=10];
+	{
+		node[shape=box];
+		auth_check [label="身份是否合法"];
+		api_param_check[label="当前API参数是否包含层级"];
+		get_current_auth_level_info[label="获取当前用户所在层级"];
+		check_user_and_param_level[label="验证用户是否可访问该层级"];
+		check_api_result_contains_level_info[label="API结果集是否包含层级"];
+		check_api_result[label="验证用户是否可访问结果集之层级"];
+		end[label="结束"];
+	}
+
+	{
+		node[shape=ellipse];
+		api_param_check_yes[label="Yes"];
+		api_param_check_no[label="No"];
+		check_api_result_contains_level_info_yes[label="Yes"];
+		check_api_result_contains_level_info_no[label="No"];
+	}
+
+	auth_check -> get_current_auth_level_info -> api_param_check;
+	api_param_check -> api_param_check_yes;
+	api_param_check -> api_param_check_no;
+	api_param_check_yes -> check_user_and_param_level;
+	api_param_check_no -> check_api_result_contains_level_info;
+	
+	check_user_and_param_level -> check_api_result_contains_level_info;
+	check_api_result_contains_level_info -> check_api_result_contains_level_info_yes;
+	check_api_result_contains_level_info -> check_api_result_contains_level_info_no;
+	check_api_result_contains_level_info_no -> end;
+	check_api_result_contains_level_info_yes -> check_api_result;
+	check_api_result -> end;
+}
